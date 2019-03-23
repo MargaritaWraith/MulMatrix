@@ -4,14 +4,47 @@
 
 #include <stdio.h>
 
-#define BLOCK_SIZE 4
+#define BLOCK_SIZE 16
 
 cudaError_t MulMatrixCuda(double* mul_matrix, double* matrix1, double * matrix2, int n);
 
+__global__ void mtxMult2(double *C, double *A, double *B, int n)
+{
+	int bx = blockIdx.x;
+	int by = blockIdx.y;
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	int aBegin = n * BLOCK_SIZE*by;
+	int aEnd = aBegin + n - 1;
+	int bBegin = BLOCK_SIZE * bx;
+	int aStep = BLOCK_SIZE;
+	int bStep = BLOCK_SIZE * n;
+
+	double sum = 0.0;
+
+	for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
+	{
+		__shared__ double as[BLOCK_SIZE][BLOCK_SIZE];
+		__shared__ double bs[BLOCK_SIZE][BLOCK_SIZE];
+
+		as[tx][ty] = A[ia + n * ty + tx];
+		bs[ty][tx] = B[ib + n * ty + tx];
+		//__syncthreads();    // должно синхронизировать (подматрицы полностью загружены)
+
+		for (int k = 0; k < BLOCK_SIZE; k++)
+			sum += as[ty][k] * bs[k][tx];
+
+		//__syncthreads(); // подматрицы больше не нужны
+	}
+
+	C[n*BLOCK_SIZE*by + BLOCK_SIZE * bx + n * ty + tx] = sum;
+}
+
 __global__ void mtxMult(double *C, double *A, double *B, int n)
 {
-	int bx = blockIdx.x; // == 0
-	int by = blockIdx.y; // == 0
+	int bx = blockIdx.x;
+	int by = blockIdx.y;
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
 
@@ -26,7 +59,6 @@ __global__ void mtxMult(double *C, double *A, double *B, int n)
 	}
 
 	int ic = n * BLOCK_SIZE*by + BLOCK_SIZE * bx; // Номер начала столбца в блоке результата
-	//C[ic + n * ty + tx] = ib;
 	C[ic + n * ty + tx] = sum; // запоминаем разультат
 }
 
@@ -34,7 +66,8 @@ int main()
 {
 	setlocale(LC_ALL, "Russian");
 
-	const int n = 4; // размерность матрицы, кратная BLOCK_SIZE 16
+	const int k = 1;
+	const int n = k * BLOCK_SIZE; // размерность матрицы, кратная BLOCK_SIZE
 
 	double matrix1[n*n] = { 0 };
 	double matrix2[n*n] = { 0 };
@@ -43,11 +76,9 @@ int main()
 	// инициализация матриц
 	for (int i = 0; i < n; i++)
 	{
-		//matrix1[i] = i;
 		for (int j = 0; j < n; j++)
 		{
-			//double v = 10 * i + j;
-			matrix1[n *i + j] = i * n + j;
+			matrix1[n *i + j] = i * 10 + j;
 		}
 	}
 
@@ -203,6 +234,7 @@ cudaError_t MulMatrixCuda(double* mul_matrix, double* matrix1, double * matrix2,
 
 	// Запуск ядра
 	mtxMult << <blocks, threads >> > (dev_mul_matrix, dev_matrix1, dev_matrix2, n);
+	//mtxMult2 << <blocks, threads >> > (dev_mul_matrix, dev_matrix1, dev_matrix2, n);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
