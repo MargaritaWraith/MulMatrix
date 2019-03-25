@@ -4,42 +4,9 @@
 
 #include <stdio.h>
 
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 100
 
-cudaError_t MulMatrixCuda(double* mul_matrix, double* matrix1, double * matrix2, int n);
-
-__global__ void mtxMult2(double *C, double *A, double *B, int n)
-{
-	int bx = blockIdx.x;
-	int by = blockIdx.y;
-	int tx = threadIdx.x;
-	int ty = threadIdx.y;
-
-	int aBegin = n * BLOCK_SIZE*by;
-	int aEnd = aBegin + n - 1;
-	int bBegin = BLOCK_SIZE * bx;
-	int aStep = BLOCK_SIZE;
-	int bStep = BLOCK_SIZE * n;
-
-	double sum = 0.0;
-
-	for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
-	{
-		__shared__ double as[BLOCK_SIZE][BLOCK_SIZE];
-		__shared__ double bs[BLOCK_SIZE][BLOCK_SIZE];
-
-		as[tx][ty] = A[ia + n * ty + tx];
-		bs[ty][tx] = B[ib + n * ty + tx];
-		//__syncthreads();    // должно синхронизировать (подматрицы полностью загружены)
-
-		for (int k = 0; k < BLOCK_SIZE; k++)
-			sum += as[ty][k] * bs[k][tx];
-
-		//__syncthreads(); // подматрицы больше не нужны
-	}
-
-	C[n*BLOCK_SIZE*by + BLOCK_SIZE * bx + n * ty + tx] = sum;
-}
+cudaError_t MulMatrixCuda(double* mul_matrix, double* mul_matrix2, double* matrix1, double * matrix2, int n);
 
 __global__ void mtxMult(double *C, double *A, double *B, int n)
 {
@@ -62,6 +29,39 @@ __global__ void mtxMult(double *C, double *A, double *B, int n)
 	C[ic + n * ty + tx] = sum; // запоминаем разультат
 }
 
+__global__ void mtxMult2(double *C, double *A, double *B, int n)
+{
+	int bx = blockIdx.x;
+	int by = blockIdx.y;
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	int aBegin = n * BLOCK_SIZE * by;
+	int aEnd = aBegin + n - 1;
+	int bBegin = BLOCK_SIZE * bx;
+	int aStep = BLOCK_SIZE;
+	int bStep = BLOCK_SIZE * n;
+
+	double sum = 0.0;
+
+	for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
+	{
+		__shared__ double as[BLOCK_SIZE][BLOCK_SIZE];
+		__shared__ double bs[BLOCK_SIZE][BLOCK_SIZE];
+
+		as[ty][tx] = A[ia + n * ty + tx];
+		bs[ty][tx] = B[ib + n * ty + tx];
+		__syncthreads();    // должно синхронизировать (подматрицы полностью загружены)
+
+		for (int k = 0; k < BLOCK_SIZE; k++)
+			sum += as[ty][k] * bs[k][tx];
+
+		__syncthreads(); // подматрицы больше не нужны
+	}
+
+	C[n * BLOCK_SIZE * by + BLOCK_SIZE * bx + n * ty + tx] = sum;
+}
+
 int main()
 {
 	setlocale(LC_ALL, "Russian");
@@ -72,6 +72,7 @@ int main()
 	double matrix1[n*n] = { 0 };
 	double matrix2[n*n] = { 0 };
 	double mul_matrix[n*n] = { 0 };
+	double mul_matrix2[n*n] = { 0 };
 
 	// инициализация матриц
 	for (int i = 0; i < n; i++)
@@ -90,16 +91,6 @@ int main()
 		}
 	}
 
-	// Вывод матрицы на консоль
-	/*for (int i = 0; i < n; i++)
-	{
-		for (int j = 0; j < n; j++)
-		{
-			double m = matrix1[i + n * j];
-			printf("[%f] ", m);
-		}
-		printf("\n");
-	}*/
 
 #pragma region Защита для неквадратных матриц
 
@@ -127,14 +118,6 @@ int main()
 	}*/
 #pragma endregion
 
-
-
-	cudaError_t cudaStatus = MulMatrixCuda(mul_matrix, matrix1, matrix2, n);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addWithCuda failed!");
-		return 1;
-	}
-
 	// Вывод матрицы на консоль
 	for (int i = 0; i < n; i++)
 	{
@@ -155,12 +138,31 @@ int main()
 		}
 		printf("\n");
 	}
-	printf("\n");
+
+	printf("\n\n");
+
+	cudaError_t cudaStatus = MulMatrixCuda(mul_matrix, mul_matrix2, matrix1, matrix2, n);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "addWithCuda failed!");
+		return 1;
+	}
+
+	//// Вывод матрицы на консоль
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n; j++)
 		{
 			double m = mul_matrix[n *i + j];
+			printf("[%g]", m);
+		}
+		printf("\n");
+	}
+	printf("\n");
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < n; j++)
+		{
+			double m = mul_matrix2[n *i + j];
 			printf("[%g]", m);
 		}
 		printf("\n");
@@ -180,12 +182,13 @@ int main()
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t MulMatrixCuda(double* mul_matrix, double* matrix1, double * matrix2, int n)
+cudaError_t MulMatrixCuda(double* mul_matrix, double* mul_matrix2, double* matrix1, double * matrix2, int n)
 {
 	int numBytes = n * n * sizeof(double);
 	double *dev_matrix1 = 0;
 	double *dev_matrix2 = 0;
 	double *dev_mul_matrix = 0;
+	double *dev_mul_matrix2 = 0;
 	cudaError_t cudaStatus;
 
 
@@ -197,6 +200,11 @@ cudaError_t MulMatrixCuda(double* mul_matrix, double* matrix1, double * matrix2,
 
 #pragma region Выделение памяти в DRAM
 	cudaStatus = cudaMalloc((void**)&dev_mul_matrix, numBytes);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaMalloc failed!");
+		goto Error;
+	}
+	cudaStatus = cudaMalloc((void**)&dev_mul_matrix2, numBytes);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMalloc failed!");
 		goto Error;
@@ -232,9 +240,34 @@ cudaError_t MulMatrixCuda(double* mul_matrix, double* matrix1, double * matrix2,
 	dim3 blocks(n / BLOCK_SIZE, n / BLOCK_SIZE);
 	dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
 
-	// Запуск ядра
+	//Таймер GPU
+	cudaEvent_t start, stop; // объявление переменных
+	float elapsedTimeInMs = 0;
+	cudaEventCreate(&start); // инициализация
+	cudaEventCreate(&stop);  // инициализация
+	cudaEventRecord(start, 0); // запуск таймера
+
+// Запуск ядра
 	mtxMult << <blocks, threads >> > (dev_mul_matrix, dev_matrix1, dev_matrix2, n);
-	//mtxMult2 << <blocks, threads >> > (dev_mul_matrix, dev_matrix1, dev_matrix2, n);
+
+	cudaEventRecord(stop, 0); // остановка времени
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsedTimeInMs, start, stop);
+	printf("Затраченное время 1-го метода GPU: %.8f мс\n\n", elapsedTimeInMs);
+
+
+	cudaEventCreate(&start); // инициализация
+	cudaEventCreate(&stop);  // инициализация
+	cudaEventRecord(start, 0); // запуск таймера
+
+	mtxMult2 << <blocks, threads >> > (dev_mul_matrix2, dev_matrix1, dev_matrix2, n);
+
+	cudaEventRecord(stop, 0); // остановка времени
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsedTimeInMs, start, stop);
+	printf("Затраченное время 2-го метода GPU: %.8f мс\n\n", elapsedTimeInMs);
+
+
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -257,9 +290,15 @@ cudaError_t MulMatrixCuda(double* mul_matrix, double* matrix1, double * matrix2,
 		fprintf(stderr, "cudaMemcpy failed!");
 		goto Error;
 	}
+	cudaStatus = cudaMemcpy(mul_matrix2, dev_mul_matrix2, numBytes, cudaMemcpyDeviceToHost);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaMemcpy failed!");
+		goto Error;
+	}
 
 Error:
 	cudaFree(dev_mul_matrix);
+	cudaFree(dev_mul_matrix2);
 	cudaFree(dev_matrix1);
 	cudaFree(dev_matrix2);
 
