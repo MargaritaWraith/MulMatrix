@@ -4,12 +4,12 @@
 
 #include <stdio.h>
 
-#define BLOCK_SIZE 8
+#define BLOCK_SIZE 16
 
-cudaError_t MulMatrixCuda(double* mul_matrix, double* mul_matrix2, double* matrix1, double * matrix2, int n);
-void print_matrix(double* mtx, int n);
+cudaError_t MulMatrixCuda(float* mul_matrix, float* mul_matrix2, float* matrix1, float * matrix2, int n);
+void print_matrix(float* mtx, int n);
 
-__global__ void mtxMult(double *C, double *A, double *B, int n)
+__global__ void mtxMult(float *C, float *A, float *B, int n)
 {
 	int bx = blockIdx.x;
 	int by = blockIdx.y;
@@ -30,7 +30,7 @@ __global__ void mtxMult(double *C, double *A, double *B, int n)
 	C[ic + n * ty + tx] = sum; // запоминаем разультат
 }
 
-__global__ void mtxMult2(double *C, double *A, double *B, int n)
+__global__ void mtxMult2(float *C, float *A, float *B, int n)
 {
 	int bx = blockIdx.x;
 	int by = blockIdx.y;
@@ -43,12 +43,12 @@ __global__ void mtxMult2(double *C, double *A, double *B, int n)
 	int aStep = BLOCK_SIZE;
 	int bStep = BLOCK_SIZE * n;
 
-	double sum = 0.0;
+	float sum = 0.0f;
 
 	for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
 	{
-		__shared__ double as[BLOCK_SIZE][BLOCK_SIZE];
-		__shared__ double bs[BLOCK_SIZE][BLOCK_SIZE];
+		__shared__ float as[BLOCK_SIZE][BLOCK_SIZE];
+		__shared__ float bs[BLOCK_SIZE][BLOCK_SIZE];
 
 		as[ty][tx] = A[ia + n * ty + tx];
 		bs[ty][tx] = B[ib + n * ty + tx];
@@ -70,10 +70,10 @@ int main()
 	const int k = 1;
 	const int n = k * BLOCK_SIZE; // размерность матрицы, кратна€ BLOCK_SIZE
 
-	double matrix1[n*n] = { 0 };
-	double matrix2[n*n] = { 0 };
-	double mul_matrix[n*n] = { 0 };
-	double mul_matrix2[n*n] = { 0 };
+	float matrix1[n*n] = { 0 };
+	float matrix2[n*n] = { 0 };
+	float mul_matrix[n*n] = { 0 };
+	float mul_matrix2[n*n] = { 0 };
 
 	// инициализаци€ матриц
 	for (int i = 0; i < n; i++)
@@ -92,57 +92,10 @@ int main()
 		}
 	}
 
-
-#pragma region «ащита дл€ неквадратных матриц
-
-	/*if (n1 != m2)
-	{
-		printf("–азмерности матриц не совпадают");
-		return 0;
-	}
-
-
-	// инициализаци€ матриц
-		for (int i = 0; i < m1; i++)
-	{
-		for (int j = 0; j < n1; j++)
-		{
-			matrix1[i][j] = 10 * i + j;
-		}
-	}
-	for (int i = 0; i < m1; i++)
-	{
-		for (int j = 0; j < n1; j++)
-		{
-			matrix2[i][j] = i + 10 * j;
-		}
-	}*/
-#pragma endregion
-
+	   
 	// ¬ывод матрицы на консоль
 	print_matrix(matrix1, n);
 	print_matrix(matrix2, n);
-
-	/*for (int i = 0; i < n; i++)
-	{
-		for (int j = 0; j < n; j++)
-		{
-			double m = matrix1[n * i + j];
-			printf("[%g] ", m);
-		}
-		printf("\n");
-	}
-	printf("\n");
-	for (int i = 0; i < n; i++)
-	{
-		for (int j = 0; j < n; j++)
-		{
-			double m = matrix2[n *i + j];
-			printf("[%g] ", m);
-		}
-		printf("\n");
-	}*/
-
 	printf("\n\n");
 
 	cudaError_t cudaStatus = MulMatrixCuda(mul_matrix, mul_matrix2, matrix1, matrix2, n);
@@ -151,34 +104,9 @@ int main()
 		return 1;
 	}
 
-	//// ¬ывод матрицы на консоль
+	// ¬ывод матрицы на консоль
 	print_matrix(mul_matrix,n);
 	print_matrix(mul_matrix2,n);
-
-#pragma region ¬ывод матриц на консоль вручную
-	/*for (int i = 0; i < n; i++)
-	{
-		for (int j = 0; j < n; j++)
-		{
-			double m = mul_matrix[n *i + j];
-			printf("[%g]", m);
-		}
-		printf("\n");
-	}
-	printf("\n");
-	for (int i = 0; i < n; i++)
-	{
-		for (int j = 0; j < n; j++)
-		{
-			double m = mul_matrix2[n *i + j];
-			printf("[%g]", m);
-		}
-		printf("\n");
-	}*/
-#pragma endregion
-
-
-
 
 	// cudaDeviceReset must be called before exiting in order for profiling and
 	// tracing tools such as Nsight and Visual Profiler to show complete traces.
@@ -192,13 +120,13 @@ int main()
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t MulMatrixCuda(double* mul_matrix, double* mul_matrix2, double* matrix1, double * matrix2, int n)
+cudaError_t MulMatrixCuda(float* mul_matrix, float* mul_matrix2, float* matrix1, float * matrix2, int n)
 {
-	int numBytes = n * n * sizeof(double);
-	double *dev_matrix1 = 0;
-	double *dev_matrix2 = 0;
-	double *dev_mul_matrix = 0;
-	double *dev_mul_matrix2 = 0;
+	int numBytes = n * n * sizeof(float);
+	float *dev_matrix1 = 0;
+	float *dev_matrix2 = 0;
+	float *dev_mul_matrix = 0;
+	float *dev_mul_matrix2 = 0;
 	cudaError_t cudaStatus;
 
 
@@ -315,14 +243,14 @@ Error:
 	return cudaStatus;
 }
 
-void print_matrix(double* mtx, int n)
+void print_matrix(float* mtx, int n)
 {
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n; j++)
 		{
-			double m = mtx[n * i + j];
-			printf("[%g] ", m);
+			float m = mtx[n * i + j];
+			printf("%6g|", m);
 		}
 		printf("\n");
 	}
