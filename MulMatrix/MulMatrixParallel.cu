@@ -4,9 +4,10 @@
 
 #include <stdio.h>
 
-#define BLOCK_SIZE 100
+#define BLOCK_SIZE 8
 
 cudaError_t MulMatrixCuda(double* mul_matrix, double* mul_matrix2, double* matrix1, double * matrix2, int n);
+void print_matrix(double* mtx, int n);
 
 __global__ void mtxMult(double *C, double *A, double *B, int n)
 {
@@ -119,7 +120,10 @@ int main()
 #pragma endregion
 
 	// Вывод матрицы на консоль
-	for (int i = 0; i < n; i++)
+	print_matrix(matrix1, n);
+	print_matrix(matrix2, n);
+
+	/*for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n; j++)
 		{
@@ -137,7 +141,7 @@ int main()
 			printf("[%g] ", m);
 		}
 		printf("\n");
-	}
+	}*/
 
 	printf("\n\n");
 
@@ -148,7 +152,11 @@ int main()
 	}
 
 	//// Вывод матрицы на консоль
-	for (int i = 0; i < n; i++)
+	print_matrix(mul_matrix,n);
+	print_matrix(mul_matrix2,n);
+
+#pragma region Вывод матриц на консоль вручную
+	/*for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n; j++)
 		{
@@ -166,7 +174,9 @@ int main()
 			printf("[%g]", m);
 		}
 		printf("\n");
-	}
+	}*/
+#pragma endregion
+
 
 
 
@@ -303,4 +313,18 @@ Error:
 	cudaFree(dev_matrix2);
 
 	return cudaStatus;
+}
+
+void print_matrix(double* mtx, int n)
+{
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < n; j++)
+		{
+			double m = mtx[n * i + j];
+			printf("[%g] ", m);
+		}
+		printf("\n");
+	}
+	printf("\n");
 }
