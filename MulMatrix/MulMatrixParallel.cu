@@ -67,20 +67,30 @@ int main()
 {
 	setlocale(LC_ALL, "Russian");
 
-	const int k = 1;
+	const int k = 400;
 	const int n = k * BLOCK_SIZE; // размерность матрицы, кратна€ BLOCK_SIZE
 
-	float matrix1[n*n] = { 0 };
+	/*float matrix1[n*n] = { 0 };
 	float matrix2[n*n] = { 0 };
 	float mul_matrix[n*n] = { 0 };
-	float mul_matrix2[n*n] = { 0 };
+	float mul_matrix2[n*n] = { 0 };*/
+
+	float* matrix1;
+	matrix1 = new float[n*n];
+	float * matrix2;
+	matrix2 = new float[n*n];
+	float * mul_matrix;
+	mul_matrix = new float[n*n];
+	float * mul_matrix2;
+	mul_matrix2 = new float[n*n];
+
 
 	// инициализаци€ матриц
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n; j++)
 		{
-			matrix1[n *i + j] = i * 10 + j;
+			matrix1[n * i + j] = i * 10 + j;
 		}
 	}
 
@@ -92,7 +102,7 @@ int main()
 		}
 	}
 
-	   
+
 	// ¬ывод матрицы на консоль
 	print_matrix(matrix1, n);
 	print_matrix(matrix2, n);
@@ -105,8 +115,8 @@ int main()
 	}
 
 	// ¬ывод матрицы на консоль
-	print_matrix(mul_matrix,n);
-	print_matrix(mul_matrix2,n);
+	print_matrix(mul_matrix, n);
+	print_matrix(mul_matrix2, n);
 
 	// cudaDeviceReset must be called before exiting in order for profiling and
 	// tracing tools such as Nsight and Visual Profiler to show complete traces.
@@ -245,6 +255,7 @@ Error:
 
 void print_matrix(float* mtx, int n)
 {
+	return;
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n; j++)
